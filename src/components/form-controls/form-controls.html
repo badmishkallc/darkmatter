@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+
+<style>
+    .dm-btn,
+    button[is=dm-button],
+    dm-button {
+        display: inline-block;
+        text-align: center;
+        white-space: nowrap;
+        touch-action: manipulation;
+        cursor: pointer;
+        user-select: none; 
+        background-image: none;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background-color: #fff;
+        color: #333;
+        padding: 5px 10px;
+        margin-bottom: 0;
+        vertical-align: middle;
+    }
+    
+    .dm-btn:disabled,
+    button[is=dm-button]:disabled,
+    dm-button:disabled {
+        cursor: not-allowed;
+    }
+</style>
+
+
+<script>
+    var doc = document.currentScript.ownerDocument;
+    
+    
+    (function() {
+        var waitClickHandler = function(e) {
+            if(e && e.target)
+            {
+                var btn = e.target;
+                if(!btn.disabled)
+                    btn.disabled = true;
+           
+                btn.removeEventListener("click", this);
+                return;
+            }
+        };
+        
+       
+        var map = new WeakMap();
+        
+        var darkMatterPropertyDescriptors = {
+            observers: {
+                 get: function() {
+                    var dynamicProps =  map.get(this);
+                    if(!dynamicProps)
+                        dynamicProps = {};
+                        
+                    var observers = dynamicProps.observers;
+                    if(!observers)
+                        observers = dynamicProps.observers = [];
+                        
+                    return observers;
+                 },
+                 enumerable: false   
+            }, 
+            eventHandlers: {
+               get: function() {
+                    var dynamicProps =  map.get(this);
+                    if(!dynamicProps)
+                        dynamicProps = {};
+                        
+                    var handlers = dynamicProps.eventHandlers;
+                    if(!handlers)
+                        handlers = dynamicProps.eventHandlers = {};
+                        
+                    return handlers;
+               }  
+            },
+            dispose: {
+                value: function() {
+                    if(this.parentElement !== null) {
+                        this.parentElement.removeChild(this);
+                    }
+                    
+                    var observers = this.observers;
+                    if(observers && observers.length > 0) {
+                        observers.forEach(function(item) {
+                            item.dispose();
+                        });
+                        observers.length = 0;
+                    }
+                    
+                    var handlers = this.handlers;
+                    if(handlers) {
+                          for(var type in handlers) {
+                              this.removeEventListener(type, handlers[type]);
+                          }
+                    }
+                  
+                    if(this.children.length === 0) {
+                        return;
+                    }
+
+                    var atat = doc.createTreeWalker(this, NodeFilter.SHOW_ELEMENT, 
+                    { 
+                        acceptNode: function(node) { 
+                            if(node.dispose)
+                                return NodeFilter.FILTER_ACCEPT; 
+                            return NodeFilter.FILTER_REJECT;
+                        } 
+                    },
+                    false
+                    );
+                    
+                    var nodeList = [];
+                    while(atat.nextNode())
+                    {
+                        nodeList.push(atat.currentNode);
+                    }
+                    
+                    nodeList.reverse();
+                    for(var i in nodeList) {
+                        nodeList[i].dispose();
+                    }
+                },
+                enumerable: false 
+            }
+        };
+        
+        var darkMatterElementPrototype = Object.create(HTMLElement.prototype, darkMatterPropertyDescriptors);
+        
+        window.DarkMatterElement = doc.registerElement('dm-element', {
+            prototype: darkMatterElementPrototype,
+            extends: 'element'
+        });
+        
+        window.DarkMatterElement.propertyDescriptors = darkMatterPropertyDescriptors;
+        
+        
+        var parseIndex = function(segment, next) {
+            var left = segment.indexOf('['),
+                path = segment.substring(0, left),
+                index = segment.substring(left, segment.length - 2);
+                
+            // leave index as a string, in JS all 
+            // indexes call toString, even on integers.    
+            return next[path][index];
+        };
+        
+        var parsePath = function(path, root) {
+                if(path.indexOf(".") === -1 && path.indexOf("[") === -1)
+                    return root[path];
+                    
+                 var next = root;
+                 var segments = path.split(".");
+                 segments.forEach(function(segment) {
+                     
+                     if(segment.indexOf('[') > -1)
+                         next = parseIndex(segment);   
+                     else 
+                         next = next[segment];
+                     
+                     if(next === undefined || next === null)
+                        throw new Error("broken path:" + segment);
+                 });
+                 
+                 return next;
+            };
+        
+        
+        var buttonPrototype = Object.create(HTMLButtonElement.prototype, {
+             createdCallback: {
+                 value: function() {
+                    console.log("created");
+                    
+                    var el = this;
+                   var attrs = this.attributes;
+                var i = 0,
+                    l = attrs.length;
+                        
+                var events = [];
+                for(; i < l; i++) {
+                    var attr = attrs[i];
+                    
+                    if(attr.name.substring(0, 2) === "on") {
+                        events.push(attr);
+                    }
+                }
+                
+                var dataContext = el.dataContext || null;
+                
+                while(el.parentElement !== null) {
+                    var p  = el.parentElement;
+                    if(p.dataContext){
+                        dataContext = this.dataContext = p.dataContext; 
+                    }
+                    
+                    el = p;
+                }
+                
+                if(dataContext === null)
+                    dataContext = window;
+                
+                events.forEach(function(item) {
+                    var name = item.name,
+                        eventName = name.substring(2),
+                        handler = parsePath(item.value, dataContext);
+                        
+                    if(el.observe)
+                        el.observe(eventName, handler);
+                    else 
+                        el.addEventListener(eventName, handler);
+                    
+                       
+                });
+                  
+                 }
+             },
+             
+             eventHandlers: darkMatterElementPrototype.eventHandlers, 
+             observers: darkMatterPropertyDescriptors.observers,
+             dispose: darkMatterPropertyDescriptors.dispose,
+             attributeChangedCallback: {
+                value: function(attr) {
+                     
+                    var value = this.getAttribute(attr);
+                   
+                    switch(attr) {
+                        case "wait": 
+                            if(value && value == "true")
+                            {
+                                this.addEventListener("click", waitClickHandler);
+                            } else {
+                                this.removeEventListener("click", waitClickHandler)
+                            }
+                        break;
+                    }
+                }
+             }
+        });
+    
+        buttonPrototype.jobDone = function(){
+            var btn = this;
+            if(btn === null || btn === "undefined")
+                throw Error("`this` is unassigned, try jobDone.bind([buttonInstance])");
+           
+            if(!btn.disabled)
+                return;
+                
+            btn.disabled = false;
+            btn.addEventListener("click", waitClickHandler);
+        };
+        
+        var EventObserver = function(type, next, error, complete) {
+           this.type = type;
+           this.onNext = next;
+           this.onError = error;
+           this.onCompleted = complete;
+        };
+        
+        EventObserver.prototype = {
+           unsubcribe: function() {
+              if(this.unsubscriber)
+              {
+                  this.unsubscriber.dispose();
+                  this.unsubscriber = null;
+              }  
+           },
+           subscribe: function(observable) {
+               if(observable != null)
+                  this.unsubscriber = observable.subscribe(this);  
+           }
+        };
+        
+        var Unsubscriber = function(parent, observer) {
+              this.parent = parent;
+              this.observer = observer;
+              parent.observers.push(observer);
+              
+              this.dispose = function() {
+                  if(this.parent == null)
+                    return;
+                  
+                  var index =  parent.observers.indexOf(observer);
+                  if(this.observer != null && index > -1) {
+                      parent.observers = parent.observers.splice(1, 1);
+                      
+                      if(this.observer.onComplete)
+                            this.observer.onComplete();
+                      
+                      if(this.observer.dispose)
+                            this.observer.dispose();
+                            
+                      this.observer = null;
+                      this.observers = null;
+                  }
+              }
+        };
+        
+        buttonPrototype.once = function(type, next, error, complete) {
+            return this.on(this, next, error, function() {
+                if(complete) 
+                    complete.call(this);
+                    
+                this.unsubscribe();
+            });
+        };
+        
+        buttonPrototype.on = function(type, next, error, complete) {
+             var self = this,
+                 observers = self.observers;
+             if(!observers[type]) {
+                 var handler = function(e) {
+                     var observers = self.observers,
+                         error = null;
+                     for(var i = 0 ; i < observers.length; i++) {
+                         try {
+                             var o = observers[i];
+                             if(error)
+                                o.onError(error);
+                             else 
+                                o.onNext(e);
+                         } catch(e) {
+                             error = e;
+                         }
+                     }
+                 };
+                 this.addEventListener(type, handler);
+                 this.eventHandlers[type] = handler;
+             }
+             return new Unsubscriber(this, new EventObserver(type, next, error, complete));
+        };
+        
+    
+       
+        window.DarkMatterButtonElement = doc.registerElement('dm-button', {
+            prototype: buttonPrototype,
+            extends: 'button'
+        });
+        
+      
+        window.onload = function() {
+              var b = new window.DarkMatterButtonElement();
+              doc.body.appendChild(b);
+              b.innerText = "Test";
+              b.setAttribute("wait", true);
+              
+             window.b = b;
+        };
+        
+        window.app = {
+            models: {
+                form: {
+                    test: function() {
+                        console.log("long path");
+                    }
+                }
+            }
+        }
+        
+        window.test = function() {
+            console.log("hi");
+        }
+    })();
+</script>
+<body>
+    <button is="dm-button" 
+            onclick="app.models.form.test" 
+            text="{binding path=}">Gundam</dm-button>
+</body>
+</html>

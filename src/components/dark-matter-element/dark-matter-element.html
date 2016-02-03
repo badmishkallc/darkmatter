@@ -1,0 +1,567 @@
+<html>
+    
+    <script>
+        var doc = document.currentScript.ownerDocument;
+        
+        (function(){
+            
+            var map = new WeakMap();
+            var empty = function(){};
+            
+            var EventTracker = function(type, next, error, complete) {
+                if(type === null)
+                    throw new Error("type is required");
+                    
+                if(next === null)
+                    throw new Error("next is required");
+                
+                this.type = type;
+                this.onNext = next;
+                this.onError = error || this.onError;
+                this.onCompleted = complete || this.onCompleted;
+            };
+            
+            EventTracker.prototype = {
+                type: null,
+                onNext: function(value) {},
+                onError: function(error) {},
+                onCompleted: function() {},
+                pause: function() {
+                    if(!this._next)  {
+                        this._next = this.onNext;
+                        this.onNext = empty;
+                    }
+                },
+                resume: function() {
+                    if(this._next) {
+                        this.onNext = this._next;
+                        this._next = null;
+                    }
+                },
+                unsubcribe: function() {
+                    if(this.unsubscriber) {
+                        this.unsubscriber.dispose();
+                        this.unsubscriber = null;
+                    }  
+                },
+                subscribe: function(observable) {
+                    if(observable != null)
+                        this.unsubscriber = observable.subscribe(this);  
+                }
+            };
+            
+            var Unsubscriber = function(parent, observer) {
+                this.parent = parent;
+                this.observer = observer;
+                parent.observers.push(observer);
+                
+                this.dispose = function() {
+                    if(this.parent === null)
+                        return;
+                    
+                    var parent = this.parent;
+                    
+                    if(parent.observers.has(observer)) {
+                        parent.observers = parent.observers.remove(observer);
+                        
+                        if(this.observer.onComplete)
+                            this.observer.onComplete();
+                        
+                        if(this.observer.dispose)
+                            this.observer.dispose();
+                                
+                        this.observer = null;
+                        this.parent = null;
+                    }
+                };
+            };
+
+
+            var observationDeck = {
+                "mutation": {
+                    attach: function(el, type, args) {
+                        var mutation = new MutationObserver(function(records){
+                            records.forEach(function(record){
+                                var observers = o.observers,
+                                    error = null,
+                                    i = 0,
+                                    l = observers.length;
+                                    
+                                for(; i < l; i++) {
+                                    var observer = observers[i];
+                                    if(observer.type !== "mutation")
+                                        continue;
+                                        
+                                    observer.onNext(record);
+                                }  
+                            });
+                        });
+                        
+                        if(!args)
+                            args = { attributes: true, childList: true, characterData: true };
+                       
+                          mutation.observe(el, args);
+                              
+                        return mutation;
+                    },
+                    detach: function(el, type, handler) {
+                        handler.disconnect();
+                    }
+                },
+                "default": { 
+                    attach:  function(el, type, args) {
+                        var handler = function(e) {
+                            var observers = o.observers,
+                                error = null,
+                                i = 0,
+                                l = observers.length;
+                                
+                            for(; i < l; i++) {
+                                try {
+                                    var observer = observers[i];
+                                    if(observer.type !== e.type)
+                                        continue;
+                                        
+                                    if(error)
+                                        observer.onError(error);
+                                    else 
+                                        observer.onNext(e);
+                                } catch(e) {
+                                    error = e;
+                                }
+                            }
+                        };
+                        el.addEventListener(type, handler);
+                        return handler;
+                    },
+                    detach: function(el, type, handler) {
+                        el.removeEventListener(type, handler);
+                    }
+                }
+            };
+        
+            var BindingObserver = function(next, error, complete) {
+                this.onNext = next;
+                this.onError = error;
+                this.onComplete = complete;  
+            };
+            
+            BindingObserver.prototype = {
+                unsubcribe: function() {
+                    if(this.unsubscriber) {
+                        this.unsubscriber.dispose();
+                        this.unsubscriber = null;
+                    }  
+                },
+                subscribe: function(observable) {
+                    if(observable != null)
+                        this.unsubscriber = observable.subscribe(this);  
+                }
+            }
+         
+            var Binding = function(leftObservable, rightUpdate, rightObservable, leftUpdate, once) {
+                  var next = function(nextValue){
+                      rightUpdate(nextValue);
+                  };
+                  
+                  if(once) {
+                      next = function() {
+                          next.call(this);
+                          
+                          this.isCompleted();
+                      };
+                  }
+                  
+                  var leftObserver = new BindingObserver(next, null, function(){
+                      this.unsubscribe();
+                  });
+                  
+                  leftObserver.subscribe(leftObservable);
+                  
+                  if(rightObservable) {
+                      var rightObserver = new BindingObserver(function(nextValue) {
+                         leftUpdate(nextValue); 
+                      }, 
+                      null, 
+                      function() {
+                          this.unsubscribe();
+                      });
+                      
+                      rightObserver.subscribe(rightObservable);
+                  }
+                  
+                  this.leftObserver = leftObserver;
+                  this.rightObserver = rightObserver;
+            };
+            
+            Binding.prototype = {
+                dispose: function() {
+                    this.leftObserver.dispose();
+                    this.rightObserver.dispose();
+                }
+            };
+            
+           
+        
+            var darkMatterPropertyDescriptors = {
+                observe: {
+                    value: function(type, args, next, error, complete) {
+                        var o = this;
+                        if(o === null)
+                            throw new Error("'this' must not be null.");
+                        
+                        var handlers = o.eventHandlers;
+                        if(handlers === null)
+                            throw new Error("eventHandlers must not be null.");
+                            
+                        if(o.observers === null)
+                            throw new Error("observers must not be null.");
+                            
+                        if(arguments.length === 1) {
+                            if(!type instanceof EventObserver)
+                                throw new Error("if observe has one argument, it must be an instance of EventObserver");
+                            
+                            next = type;
+                            args = null;
+                            type = next.type;
+                        }
+                            
+                        if(arguments.length === 2) {
+                            if(typeof type !== "string") {
+                                next = type;
+                                type = next.type;
+                            } else {
+                                next = args;
+                                args = null; 
+                            }
+                        }
+                        
+                        if(arguments.length < 5 && typeof args === "function") {
+                            complete = error;
+                            error = next;
+                            next = args;
+                            args = null;
+                        }
+                        
+                        if(!handlers[type]) {
+                            var guide = observationDeck[type]
+                            if(!guide)
+                                guide = observationDeck["default"];
+                            
+                            handlers[type] = guide.attach(o, type, args);
+                        }
+                        
+                        if(typeof next === "function") {
+                            return new Unsubscriber(this, new EventObserver(type, next, error, complete));
+                        }
+                    
+                        return new Unsubscriber(this, next);
+                    },
+                    enumerable: false,
+                    configurable: false,
+                    writable: false
+                },
+                
+                
+                observeOnce: {
+                    value: function(type, next, error, complete) {
+                        var o = this;
+                        if(o === null)
+                            throw new Error("'this' must not be null.");
+                            
+                        return o.on(type, function(){
+                            next.call(this);
+                            this.isCompleted();
+                        }, error, function() {
+                            if(complete)
+                                complete.call(this);
+                                
+                            this.unsubscribe();
+                        });
+                    },
+                    configurable: false,
+                    writable: false
+                },
+                observers: {
+                    get: function() {
+                        var dynamicProps =  map.get(this);
+                        if(!dynamicProps)
+                            dynamicProps = {};
+                            
+                        var observers = dynamicProps.observers;
+                        if(!observers)
+                            observers = dynamicProps.observers = new Set();
+                            
+                        return observers;
+                    },
+                    set: function(value) {
+                         if(value != null) 
+                            throw new Error("observers can only be set to null");
+                            
+                         var dynamicProps =  map.get(this);
+                         if(!dynamicProps)
+                            return;
+                            
+                         if(dynamicProps.observers)
+                            delete dynamicProps.observers;
+                    },
+                    enumerable: false,
+                    configurable: false   
+                }, 
+                observationHandlers: {
+                    get: function() {
+                        var dynamicProps =  map.get(this);
+                        if(!dynamicProps)
+                            dynamicProps = {};
+                            
+                        var handlers = dynamicProps.observationHandlers;
+                        if(!handlers)
+                            handlers = dynamicProps.observationHandlers = {};
+                            
+                        return handlers;
+                    }, 
+                    set: function(value) {
+                        if(value != null) 
+                            throw new Error("observationHandler can only be set to null");
+                            
+                         var dynamicProps =  map.get(this);
+                         if(!dynamicProps)
+                            return;
+                            
+                         if(dynamicProps.observationHandlers)
+                            delete dynamicProps.observationHandlers
+                    },
+                    enumerable: false,
+                    configurable: false 
+                },
+                dispose: {
+                    value: function() {
+                        let o = this;
+                        if(o === null)
+                            return;
+                        
+                        var observers = o.observers;
+                        if(observers && observers.size > 0) {
+                            observers.forEach(function(item) {
+                                item.dispose();
+                            });
+                            observers.clear();
+                        }
+                        
+                        var handlers = o.observationHandlers;
+                        if(handlers) {
+                            for(var type in handlers) {
+                                var guide = observationDeck[type]
+                                if(!deck)
+                                    guide = observationDeck["default"];
+                                
+                                deck.detach(el, type, handlers[type]);
+                            }
+                        }
+                    
+                        var walker = doc.createTreeWalker(this, NodeFilter.SHOW_ELEMENT, { 
+                                acceptNode: function(node) { 
+                                    if(node.dispose)
+                                        return NodeFilter.FILTER_ACCEPT; 
+                                    
+                                    return NodeFilter.FILTER_REJECT;
+                                } 
+                            },
+                            false
+                        );
+                        
+                        var nodeList = [];
+                        while(walker.nextNode()) {
+                            nodeList.push(walker.currentNode);
+                        }
+                        
+                        nodeList.reverse();
+                        var i = 0, l = nodeList.length;
+                        for(; i < l; i++) {
+                            nodeList[i].dispose();
+                        }
+                    },
+                    enumerable: false 
+                }
+            };
+            
+        var parseIndex = function(segment, next) {
+            var left = segment.indexOf('['),
+                path = segment.substring(0, left),
+                index = segment.substring(left, segment.length - 2);
+                
+            // leave index as a string, in JS all 
+            // indexes call toString, even on integers.    
+            return next[path][index];
+        };
+        
+        var parsePath = function(path, root) {
+                if(path.indexOf(".") === -1 && path.indexOf("[") === -1)
+                    return root[path];
+                    
+                 var next = root;
+                 var segments = path.split(".");
+                 segments.forEach(function(segment) {
+                     
+                     if(segment.indexOf('[') > -1)
+                         next = parseIndex(segment);   
+                     else 
+                         next = next[segment];
+                     
+                     if(next === undefined || next === null)
+                        throw new Error("broken path:" + segment);
+                 });
+                 
+                 return next;
+            };
+            
+            
+            var BindingExpression = function() {
+                
+            };
+            
+            BindingExpression.prototype = {
+                target: null,
+                dataItem: null,
+                resolvedSource: null,
+                updateTarget: function() {
+                    
+                },
+                updateSource: function() {
+                    
+                }
+            }
+            
+            
+            var Binding = function(path) {
+                this.path = path;
+            };
+            
+            Binding.prototype = {
+               source: null,
+               path: null,
+               mode: "oneWay",
+               elementName: null,
+               converter: null,
+               stringFormat: null,
+               validationRules: null
+            };
+            
+            var parseBindingSyntax = function(text) {
+                var i = 0,
+                    l = test.length;
+                    
+                var expression = null;
+                var node = null;
+                var objName = null;
+                var propertyName = null;
+                var propertyValue = null;
+                var currentExpression = "";
+                var parseObjName = false;
+                var parsePropertyName = false;
+                var parsePropertyValue = false;
+                    
+                for(; i < l; i++) {
+                    var c = test[i];
+                    switch(c) {
+                        case '{': 
+                            parseObjName = true;
+                            
+                            break;
+                        case '=':
+                            propertyName = currentExpression;
+                            currentExpression = "";
+                            break;
+                        case ',':
+                            parsePropertyValue = false;
+                            parsePropertyName = true;
+                            node[propertyName] = currentExpression;
+                            break;
+                        case ' ':
+                            if(parseObjName) {
+                                objName = currentExpression;
+                                if(objName === "binding")
+                                    node = new Binding();
+                                    
+                                if(!expression)
+                                    expression = node;
+                                    
+                                parseObjName = false;
+                                parsePropertyName = true;
+                            }
+                          
+                            currentExpression = "";
+                            break;
+                        case '}':
+                            node[propertyName] = currentExpression;
+                            currentExpression = "";
+                            parsePropertyValue = false;
+                            parsePropertyName = true;
+                            break;
+                        default: 
+                            currentExpression += c;
+                            break;
+                    }
+                }
+                
+                return expression; 
+            };
+            
+            var parseEventBindings = function(el) {
+                var attrs = this.attributes;
+                var i = 0,
+                    l = attrs.length;
+                        
+                var events = [];
+                for(; i < l; i++) {
+                    var attr = attrs[i];
+                    
+                    if(attr.name.substring(0, 2) === "on") {
+                        events.push(attr);
+                    }
+                }
+                
+                var dataContext = el.dataContext || null;
+                
+                while(el.parentElement !== null) {
+                    var el  = el.parentElement;
+                    if(el.dataContext)
+                        dataContext = this.dataContext = p.dataContext; 
+                }
+                
+                if(dataContext === null)
+                    dataContext = window;
+                
+                events.forEach(function(item) {
+                    var name = item.name,
+                        eventName = name.substring(2),
+                        handler = parsePath(item.value, dataContext);
+                        
+                    if(el.observe)
+                        el.observe(eventName, handler);
+                    else 
+                        el.addEventListener(eventName, handler);
+                });
+            };
+            
+            var darkMatterElementPrototype = Object.create(HTMLElement.prototype, darkMatterPropertyDescriptors);
+            
+            window.DarkMatterElement = doc.registerElement('dm-element', {
+                prototype: darkMatterElementPrototype,
+                extends: 'element'
+            });
+            
+           
+            window.DarkMatter = {
+               UI: {
+                   Observers: {
+                        ObservationDeck: observationDeck,
+                        EventTracker: EventTracker,
+                        Unsubscriber: Unsubscriber,
+                   }
+                   PropertyDescriptors: darkMatterPropertyDescriptors
+               }  
+            };
+        })();
+    </script>
+</html>
