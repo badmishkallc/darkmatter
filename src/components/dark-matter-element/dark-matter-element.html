@@ -22,7 +22,7 @@
             };
             
             EventTracker.prototype = {
-                type: null,
+                name: null,
                 onNext: function(value) {},
                 onError: function(error) {},
                 onCompleted: function() {},
@@ -38,13 +38,13 @@
                         this._next = null;
                     }
                 },
-                unsubcribe: function() {
+                detach: function() {
                     if(this.unsubscriber) {
                         this.unsubscriber.dispose();
                         this.unsubscriber = null;
                     }  
                 },
-                subscribe: function(observable) {
+                attach: function(observable) {
                     if(observable != null)
                         this.unsubscriber = observable.subscribe(this);  
                 }
@@ -400,9 +400,12 @@
                     return root[path];
                     
                  var next = root;
+                 var previous = null;
                  var segments = path.split(".");
+                 var lastSegment = null;
                  segments.forEach(function(segment) {
-                     
+                     previous = next;
+                     lastSegment = segment;
                      if(segment.indexOf('[') > -1)
                          next = parseIndex(segment);   
                      else 
@@ -412,23 +415,78 @@
                         throw new Error("broken path:" + segment);
                  });
                  
-                 return next;
+                 return {obj: previous, prop: next, propName: lastSegment};
             };
             
             
-            var BindingExpression = function() {
+            
+            var BindingExpression = function(target, targetName, targetAccessor, targetType, binding, sourceType) {
+              
+                var source = binding.source,
+                    path = binding.path;
+                 
+                var meta = parsePath(path, source),
+                    obj = meta.obj,
+                    propName = obj.propName;  
+                    
+                if(!obj.observe)
+                    throw Error("Model object is not observable");
                 
+                var self = this;
+                if(binding.mode === "once") {
+                    obj.observe(propName, function(e) {
+                        self.updateTarget();
+                        this.unsubscribe();
+                    });
+                } else if(binding.mode !== "to-source") {
+                    obj.observe(propName, function(e) {
+                        self.updateTarget();
+                    });
+                }
+                
+                if(binding.mode === "two-way" || binding.mode === "to-source") {
+                    target.observe(targetName, function(e) {
+                       self.updateSource(); 
+                    });
+                }
+                
+                    
+                if(sourceType === null)
+                    sourceType = typeof(obj[propName]);
+                if(sourceType === "undefined")
+                    sourceType = "string";
+                    
+                this.targetType = targetType;
+                 
+                this.sourceAccessor = source;
+                
+                this.target = el;
+                    
+                this.targetAccessor = targetAccessor;
             };
             
             BindingExpression.prototype = {
                 target: null,
-                dataItem: null,
-                resolvedSource: null,
+                binding: null,
                 updateTarget: function() {
-                    
+                    var value = this.sourceAccessor(),
+                        binding = this.binding;
+                        
+                    if(binding.stringFormat)
+                        value = string.replace(binding.stringFormat, value);
+                    if(binding.converter)
+                        value = binding.converter.convert(value, this.targetType);
+                        
+                    this.targetAccessor(value);
                 },
                 updateSource: function() {
+                    var value = this.targetAccessor(),
+                        binding = this.binding;
                     
+                    if(binding.converter)
+                        value = binding.converter.convertBack(value, this.sourceType);
+                    
+                    this.sourceAccessor(value);
                 }
             }
             
@@ -466,7 +524,6 @@
                     switch(c) {
                         case '{': 
                             parseObjName = true;
-                            
                             break;
                         case '=':
                             propertyName = currentExpression;

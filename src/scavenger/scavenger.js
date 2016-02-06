@@ -1,4 +1,4 @@
-import Symbol from "../polyfill/symbol.js";
+import { Symbol } from "../core/globals.js";
 
 var Scavenger = function() {
     this.test = true;  

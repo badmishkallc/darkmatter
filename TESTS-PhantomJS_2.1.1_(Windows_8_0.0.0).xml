@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<testsuite name="PhantomJS 2.1.1 (Windows 8 0.0.0)" package="" timestamp="2016-02-06T20:12:55" id="0" hostname="DESKTOP-2KSN54A" tests="5" errors="0" failures="0" time="0.002">
+  <properties>
+    <property name="browser.fullName" value="Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1"/>
+  </properties>
+  <testcase name="import" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
+  <testcase name="empty constructor" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
+  <testcase name="bad constructor" time="0.001" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
+  <testcase name="iterable" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
+  <testcase name="first" time="0.001" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).Scavenger"/>
+  <system-out>
+    <![CDATA[
+]]>
+  </system-out>
+  <system-err/>
+</testsuite>

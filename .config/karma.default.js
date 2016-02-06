@@ -14,7 +14,7 @@ module.exports = function(config) {
 		plugins: [
 			npm + 'karma-phantomjs-launcher',
 			npm + 'karma-chrome-launcher',
-			//'karma-edge-launcher',
+			//'karma-edge-launcher', not supported yet
 			npm + 'karma-firefox-launcher',
 			npm + 'karma-junit-reporter',
 			npm + 'karma-mocha',
@@ -32,6 +32,7 @@ module.exports = function(config) {
         babelPreprocessor: {
             options: {
                 presets: ['es2015'],
+                plugins: ['babel-plugin-transform-class-properties'],
                 sourceMap: 'inline'
             }
         },
