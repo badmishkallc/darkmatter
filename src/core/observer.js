@@ -79,11 +79,11 @@ var checkMethod = function(obj, key) {
     if(func === null || func === undefined)
         return undefined;
 
-    // must throw error if func is primitive.
-    if(typeof value !== "function")
+    // must throw error if func is primitive
+    if(typeof func !== "function")
         throw new TypeError(key + " is not function");
 
-    return value;
+    return func;
 };
 
 var suppress = function(action) {
@@ -149,7 +149,7 @@ export class SubscriptionObserver {
     }
 }
 
-export class Observable {
+export default class Observable {
 
 
     constructor(subscribe) {
@@ -321,7 +321,6 @@ function listen(element, eventName) {
 
 
 var createDelegateObservable = function(observable, observer, next, error, complete) {
-
     return observable.subscribe({
         next: next || function(v) {
             observer.next(v);
@@ -332,7 +331,7 @@ var createDelegateObservable = function(observable, observer, next, error, compl
         complete: complete || function(value) {
             observer.complete(value);
         }
-    })
+    });
 };
 
 Observable.prototype.map = function(select) {
@@ -348,7 +347,6 @@ Observable.prototype.map = function(select) {
                 this.error(e);
                 return;
             }
-
             observer.next(result);
         });
 

@@ -1,15 +1,27 @@
 <?xml version="1.0"?>
-<testsuite name="PhantomJS 2.1.1 (Windows 8 0.0.0)" package="" timestamp="2016-02-06T20:12:55" id="0" hostname="DESKTOP-2KSN54A" tests="5" errors="0" failures="0" time="0.002">
+<testsuite name="PhantomJS 2.1.1 (Windows 8 0.0.0)" package="" timestamp="2016-02-08T18:26:24" id="0" hostname="DESKTOP-2KSN54A" tests="7" errors="0" failures="0" time="0.005">
   <properties>
     <property name="browser.fullName" value="Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1"/>
   </properties>
-  <testcase name="import" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
+  <testcase name="import" time="0.001" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
   <testcase name="empty constructor" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
   <testcase name="bad constructor" time="0.001" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
   <testcase name="iterable" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).List"/>
-  <testcase name="first" time="0.001" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).Scavenger"/>
+  <testcase name="import" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).Observable"/>
+  <testcase name="empty constructor" time="0.003" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).Observable"/>
+  <testcase name="first" time="0" classname="PhantomJS_2_1_1_(Windows_8_0_0_0).Scavenger"/>
   <system-out>
-    <![CDATA[
+    <![CDATA[PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: SubscriptionObserver{}
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: 'Construct'
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: Object{next: function (value) { ... }, error: function (e) { ... }, complete: function (value) { ... }}
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: 'next'
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: 'filter'
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: SubscriptionObserver{}
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: Object{next: function next(e) { ... }}
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: 'next'
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: <div></div>
+,PhantomJS 2.1.1 (Windows 8 0.0.0) LOG: 'fired'
+
 ]]>
   </system-out>
   <system-err/>
